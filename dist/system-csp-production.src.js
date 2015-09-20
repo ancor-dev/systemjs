@@ -1,5 +1,5 @@
 /*
- * SystemJS v0.19.0-dev
+ * SystemJS v0.19.0
  */
 (function() {
 function bootstrap() {(function(__global) {
@@ -1009,6 +1009,7 @@ function SystemJSLoader() {
 function SystemProto() {};
 SystemProto.prototype = SystemLoader.prototype;
 SystemJSLoader.prototype = new SystemProto();
+SystemJSLoader.prototype.constructor = SystemJSLoader;
 
 var systemJSConstructor;
 
@@ -1404,7 +1405,8 @@ SystemJSLoader.prototype.config = function(cfg) {
       prop = prop.substr(0, prop.length - 1);
 
       // if doing default js extensions, undo to get package name
-      if (this.defaultJSExtensions && p.substr(p.length - 3, 3) != '.js')
+      // (unless already a package which would have skipped extension)
+      if (!this.packages[prop] && this.defaultJSExtensions && p.substr(p.length - 3, 3) != '.js')
         prop = prop.substr(0, prop.length - 3);
 
       this.packages[prop]= this.packages[prop] || {};
@@ -1681,7 +1683,7 @@ hook('normalize', function(normalize) {
     if (normalized.length == pkgName.length + 1 && normalized[pkgName.length] == '/')
       return normalized;
 
-    // no submap if name is package itself
+    // also no submap if name is package itself (import 'pkg' -> 'path/to/pkg.js')
     if (normalized.length == pkgName.length)
       return normalized + (loader.defaultJSExtensions && normalized.substr(normalized.length - 3, 3) != '.js' ? '.js' : '');
 
@@ -2669,7 +2671,9 @@ hook('onScriptLoad', function(onScriptLoad) {
       }
 
       // Contains System.register calls
-      else if (load.metadata.format == 'register' || load.metadata.format == 'esm' || load.metadata.format == 'es6') {
+      // (dont run bundles in the builder)
+      else if (!(loader.builder && load.metadata.bundle) 
+          && (load.metadata.format == 'register' || load.metadata.format == 'esm' || load.metadata.format == 'es6')) {
         anonRegister = null;
         calledRegister = false;
 
@@ -3706,20 +3710,6 @@ function getBundleFor(loader, name) {
       return locate.call(this, load);
     };
   });
-
-  hook('fetch', function(fetch) {
-    return function(load) {
-      var loader = this;
-      if (loader.builder)
-        return fetch.call(loader, load);
-      
-      // if already defined, no need to load a bundle
-      if (load.name in loader.defined)
-        return '';
-
-      return fetch.call(loader, load);
-    };
-  });
 })();
 /*
  * Dependency Tree Cache
@@ -3765,8 +3755,7 @@ function getBundleFor(loader, name) {
 })();
   
 System = new SystemJSLoader();
-System.constructor = SystemJSLoader;
-System.version = '0.19.0-dev CSP';
+System.version = '0.19.0 CSP';
   // -- exporting --
 
   if (typeof exports === 'object')
