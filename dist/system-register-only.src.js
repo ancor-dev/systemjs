@@ -81,9 +81,13 @@
     baseURI = baseURI.substr(0, baseURI.lastIndexOf('/') + 1);
   }
   else if (typeof process != 'undefined' && process.cwd) {
-    baseURI = 'file://' + (isWindows ? '/' : '') + process.cwd() + '/';
-    if (isWindows)
-      baseURI = baseURI.replace(/\\/g, '/');
+    if (__global.baseURI) {
+      baseURI = __global.baseURI;
+    } else {
+      baseURI = 'file://' + (isWindows ? '/' : '') + process.cwd() + '/';
+      if (isWindows)
+        baseURI = baseURI.replace(/\\/g, '/');
+    }
   }
   else if (typeof location != 'undefined') {
     baseURI = __global.location.href;
@@ -957,7 +961,7 @@ function SystemLoader() {
 // NB no specification provided for System.paths, used ideas discussed in https://github.com/jorendorff/js-loaders/issues/25
 function applyPaths(paths, name) {
   // most specific (most number of slashes in path) match wins
-  var pathMatch = '', wildcard, maxWildcardPrefixLen = 0;
+  var pathMatch = '', wildcard, maxSlashCount = 0;
 
   // check to see if we have a paths entry
   for (var p in paths) {
@@ -974,11 +978,11 @@ function applyPaths(paths, name) {
     }
     // wildcard path match
     else {
-      var wildcardPrefixLen = pathParts[0].length;
-      if (wildcardPrefixLen >= maxWildcardPrefixLen &&
+      var slashCount = p.split('/').length;
+      if (slashCount >= maxSlashCount &&
           name.substr(0, pathParts[0].length) == pathParts[0] &&
           name.substr(name.length - pathParts[1].length) == pathParts[1]) {
-            maxWildcardPrefixLen = wildcardPrefixLen;
+            maxSlashCount = slashCount;
             pathMatch = p;
             wildcard = name.substr(pathParts[0].length, name.length - pathParts[1].length - pathParts[0].length);
           }
