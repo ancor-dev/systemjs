@@ -9,7 +9,7 @@
   "author": "Guy Bedford",
   "license": "MIT",
   "dependencies": {
-    "es6-module-loader": "^0.17.9",
+    "es6-module-loader": "nfl/es6-module-loader#0.17.9/fetch-support",
     "when": "^3.7.5"
   },
   "devDependencies": {
