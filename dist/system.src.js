@@ -1386,8 +1386,8 @@ var __exec;
   var callCounter = 0;
   var curLoad;
   function preExec(loader, load) {
-    if (callCounter++ == 0)
-      curSystem = __global.System;
+    callCounter++;
+    curSystem = __global.System;
     __global.System = loader;
     curLoad = load;
   }
