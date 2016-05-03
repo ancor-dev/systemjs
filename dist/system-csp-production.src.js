@@ -101,38 +101,15 @@ global.URLPolyfill = URLPolyfill;
     }
   })();
 
-  var errArgs = new Error(0, '_').fileName == '_';
-
   function addToError(err, msg) {
-    // parse the stack removing loader code lines for simplification
-    if (!err.originalErr) {
-      var stack = (err.stack || err.message || err).toString().split('\n');
-      var newStack = [];
-      for (var i = 0; i < stack.length; i++) {
-        if (typeof $__curScript == 'undefined' || stack[i].indexOf($__curScript.src) == -1)
-          newStack.push(stack[i]);
-      }
+    if (err instanceof Error) {
+      err.message = msg + '\n\t' + err.message;
+      Error.call(err, err.message);
     }
-
-    var newMsg = (newStack ? newStack.join('\n\t') : err.message) + '\n\t' + msg;
-
-    // Convert file:/// URLs to paths in Node
-    if (!isBrowser)
-      newMsg = newMsg.replace(isWindows ? /file:\/\/\//g : /file:\/\//g, '');
-
-    var newErr = errArgs ? new Error(newMsg, err.fileName, err.lineNumber) : new Error(newMsg);
-    
-    // Node needs stack adjustment for throw to show message
-    if (!isBrowser)
-      newErr.stack = newMsg;
-    // Clearing the stack stops unnecessary loader lines showing
-    else
-      newErr.stack = null;
-    
-    // track the original error
-    newErr.originalErr = err.originalErr || err;
-
-    return newErr;
+    else {
+      err = msg + '\n\t' + err;
+    }
+    return err;
   }
 
   function __eval(source, debugName, context) {
@@ -159,9 +136,13 @@ global.URLPolyfill = URLPolyfill;
     baseURI = baseURI.substr(0, baseURI.lastIndexOf('/') + 1);
   }
   else if (typeof process != 'undefined' && process.cwd) {
-    baseURI = 'file://' + (isWindows ? '/' : '') + process.cwd() + '/';
-    if (isWindows)
-      baseURI = baseURI.replace(/\\/g, '/');
+    if (__global.baseURI) {
+      baseURI = __global.baseURI;
+    } else {
+      baseURI = 'file://' + (isWindows ? '/' : '') + process.cwd() + '/';
+      if (isWindows)
+        baseURI = baseURI.replace(/\\/g, '/');
+    }
   }
   else if (typeof location != 'undefined') {
     baseURI = __global.location.href;
@@ -170,12 +151,7 @@ global.URLPolyfill = URLPolyfill;
     throw new TypeError('No environment baseURI');
   }
 
-  try {
-    var nativeURL = new __global.URL('test:///').protocol == 'test:';
-  }
-  catch(e) {}
-
-  var URL = nativeURL ? __global.URL : __global.URLPolyfill;
+  var URL = __global.URLPolyfill || __global.URL;
 /*
 *********************************************************************************************
 
@@ -370,6 +346,7 @@ function logloads(loads) {
         load = loader.loads[i];
         if (load.name != name)
           continue;
+        console.assert(load.status == 'loading' || load.status == 'loaded', 'loading or loaded');
         return load;
       }
 
@@ -605,6 +582,8 @@ function logloads(loads) {
   function addLoadToLinkSet(linkSet, load) {
     if (load.status == 'failed')
       return;
+
+    console.assert(load.status == 'loading' || load.status == 'loaded', 'loading or loaded on link set');
 
     for (var i = 0, l = linkSet.loads.length; i < l; i++)
       if (linkSet.loads[i] == load)
@@ -1043,9 +1022,6 @@ function applyPaths(paths, name) {
 
   // check to see if we have a paths entry
   for (var p in paths) {
-    if (paths.hasOwnProperty && !paths.hasOwnProperty(p))
-      continue;
-
     var pathParts = p.split('*');
     if (pathParts.length > 2)
       throw new TypeError('Only one wildcard in a path is permitted');
@@ -1056,9 +1032,8 @@ function applyPaths(paths, name) {
         return paths[p];
       
       // support trailing / in paths rules
-      else if (name.substr(0, p.length - 1) == p.substr(0, p.length - 1) && (name.length < p.length || name[p.length - 1] == p[p.length - 1]) && (paths[p][paths[p].length - 1] == '/' || paths[p] == '')) {
-        return paths[p].substr(0, paths[p].length - 1) + (name.length > p.length ? (paths[p] && '/' || '') + name.substr(p.length) : '');
-      }
+      else if (name.substr(0, p.length - 1) == p.substr(0, p.length - 1) && (name.length < p.length || name[p.length - 1] == p[p.length - 1]) && paths[p][paths[p].length - 1] == '/')
+        return paths[p].substr(0, paths[p].length - 1) + (name.length > p.length ? '/' + name.substr(p.length) : '');
     }
     // wildcard path match
     else {
@@ -1161,8 +1136,63 @@ SystemLoader.prototype = new LoaderProto();
   else if (typeof require != 'undefined' && typeof process != 'undefined') {
     var fs;
     fetchTextFromURL = function(url, authorization, fulfill, reject) {
-      if (url.substr(0, 8) != 'file:///')
-        throw new Error('Unable to fetch "' + url + '". Only file URLs of the form file:/// allowed running in Node.');
+      if (url.substr(0, 8) != 'file:///') {
+        if (typeof fetch === 'function') {
+          var requestHeaders = {
+            'accept': 'application/x-es-module, */*'
+          };
+
+          if (authorization) {
+            if (typeof authorization == 'string') {
+              requestHeaders['authorization'] = authorization;
+            }
+          }
+
+          fetch.__fetchCache = fetch.__fetchCache || {};
+          var cachedUrl = fetch.__fetchCache[url];
+
+          if (cachedUrl && cachedUrl.lastModified) {
+            requestHeaders['if-modified-since'] = cachedUrl.lastModified;
+          }
+
+          return fetch(url, {
+            cache: 'default',
+            headers: requestHeaders,
+            method: 'GET'
+          })
+            .then(function (response) {
+              // Happy path
+              if (response.status >= 200 && response.status < 400) {
+                if (response.status === 304 && cachedUrl && cachedUrl.responseText) {
+                  return fulfill(cachedUrl.responseText);
+                }
+
+                return response.text().then(function (data) {
+                  // Strip Byte Order Mark out if it's the leading char
+                  var dataString = data + '';
+                  if (dataString[0] === '\ufeff') {
+                    dataString = dataString.substr(1);
+                  }
+
+                  fetch.__fetchCache[url] = {
+                    lastModified: response.headers.get('last-modified'),
+                    responseText: dataString
+                  };
+
+                  return fulfill(dataString);
+                });
+              }
+
+              // Sad path
+              return reject(new Error('Fetch error' + (response.status ? ' (' + response.status + (response.statusText ? ' ' + response.statusText  : '') + ')' : '') + ' loading ' + url));
+            })
+            .catch(function (err) {
+              return reject(err);
+            });
+        } else {
+          throw new Error('Unable to fetch "' + url + '". Only file URLs of the form file:/// allowed running in Node.');
+        }
+      }
       fs = fs || require('fs');
       if (isWindows)
         url = url.replace(/\//g, '\\').substr(8);

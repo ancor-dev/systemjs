@@ -100,8 +100,6 @@ global.URLPolyfill = URLPolyfill;
     }
   })();
 
-  var errArgs = new Error(0, '_').fileName == '_';
-
   function addToError(err, msg) {
     // parse the stack removing loader code lines for simplification
     if (!err.originalErr) {
@@ -112,26 +110,10 @@ global.URLPolyfill = URLPolyfill;
           newStack.push(stack[i]);
       }
     }
-
-    var newMsg = (newStack ? newStack.join('\n\t') : err.message) + '\n\t' + msg;
-
-    // Convert file:/// URLs to paths in Node
-    if (!isBrowser)
-      newMsg = newMsg.replace(isWindows ? /file:\/\/\//g : /file:\/\//g, '');
-
-    var newErr = errArgs ? new Error(newMsg, err.fileName, err.lineNumber) : new Error(newMsg);
-    
-    // Node needs stack adjustment for throw to show message
-    if (!isBrowser)
-      newErr.stack = newMsg;
-    // Clearing the stack stops unnecessary loader lines showing
-    else
-      newErr.stack = null;
-    
-    // track the original error
-    newErr.originalErr = err.originalErr || err;
-
-    return newErr;
+    else {
+      err = msg + '\n\t' + err;
+    }
+    return err;
   }
 
   function __eval(source, debugName, context) {
@@ -158,9 +140,13 @@ global.URLPolyfill = URLPolyfill;
     baseURI = baseURI.substr(0, baseURI.lastIndexOf('/') + 1);
   }
   else if (typeof process != 'undefined' && process.cwd) {
-    baseURI = 'file://' + (isWindows ? '/' : '') + process.cwd() + '/';
-    if (isWindows)
-      baseURI = baseURI.replace(/\\/g, '/');
+    if (__global.baseURI) {
+      baseURI = __global.baseURI;
+    } else {
+      baseURI = 'file://' + (isWindows ? '/' : '') + process.cwd() + '/';
+      if (isWindows)
+        baseURI = baseURI.replace(/\\/g, '/');
+    }
   }
   else if (typeof location != 'undefined') {
     baseURI = __global.location.href;
@@ -169,12 +155,7 @@ global.URLPolyfill = URLPolyfill;
     throw new TypeError('No environment baseURI');
   }
 
-  try {
-    var nativeURL = new __global.URL('test:///').protocol == 'test:';
-  }
-  catch(e) {}
-
-  var URL = nativeURL ? __global.URL : __global.URLPolyfill;
+  var URL = __global.URLPolyfill || __global.URL;
 /*
 *********************************************************************************************
 
