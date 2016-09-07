@@ -141,6 +141,40 @@ asyncTest('Global script loading that detects as AMD with shim config', function
   }, err);
 });
 
+asyncTest('Global script with exports as an array', function() {
+  System.config({
+    meta: {
+      'tests/global-exports-array.js': {
+        exports: ['A', 'B']
+      }
+    }
+  });
+
+  System['import']('tests/global-exports-array.js').then(function(m) {
+    ok(m.A == 'A');
+    ok(m.B == 'B');
+    ok(!m.C);
+    ok(m['default'] == 'A');
+    start();
+  }, err);
+});
+
+asyncTest('Global with encapsulated execution', function() {
+  System.config({
+    meta: {
+      'tests/global-encapsulation.js': {
+        encapsulateGlobal: true
+      }
+    }
+  });
+
+  System['import']('tests/global-encapsulation.js').then(function(m) {
+    ok(m == 'encapsulated global');
+    ok(global.globalName === undefined);
+    start();
+  }, err);
+});
+
 if (!ie8)
 asyncTest('Meta should override meta syntax', function() {
   System.meta[System.normalizeSync('tests/meta-override.js')] = { format: 'esm' };
@@ -199,6 +233,30 @@ asyncTest('Contextual map configuration', function() {
     start();
   }, err);
 });
+
+asyncTest('Contextual map configuration for a package that is a file', function() {
+  System.config({
+    packages: {
+      'tests/jquery.js': {
+        meta: {
+          '*': {
+            deps: ['a']
+          }
+        },
+        map: {
+          'a': 'tests/amd-dep-A.js'
+        }
+      }
+    },
+    map: {
+      jquery: 'tests/jquery.js'
+    }
+  });
+  System['import']('tests/jquery.js').then(function(m) {
+    ok(m == 10);
+    start();
+  }, err);
+})
 
 asyncTest('Package map with shim', function() {
   System.config({
@@ -266,13 +324,12 @@ asyncTest('AMD with dynamic require callback', function() {
   });
 });
 
-System.config({
-  bundles: {
-    'tests/amd-bundle.js': ['bundle-1', 'bundle-2']
-  }
-});
-
 asyncTest('Loading an AMD bundle', function() {
+  System.config({
+    bundles: {
+      'tests/amd-bundle.js': ['bundle-*']
+    }
+  });
   System['import']('bundle-1').then(function(m) {
     ok(m.defined == true);
     start();
@@ -295,6 +352,23 @@ asyncTest('Loading an AMD named define', function() {
   }, err);
 });
 
+asyncTest('Loading an AMD bundle with an anonymous define', function() {
+  System['import']('tests/anon-named.js').then(function(m) {
+    ok(m.anon == true);
+    start();
+  }, err);
+});
+
+asyncTest('Loading an AMD bundle with multiple anonymous defines', function() {
+  System['import']('tests/multiple-anonymous.js').then(function(m) {
+    ok(false);
+    start();
+  }, function(e) {
+    ok(e.toString().indexOf('Multiple anonymous') != -1)
+    start();
+  });
+})
+
 asyncTest('Loading AMD CommonJS form', function() {
   System['import']('tests/amd-cjs-module.js').then(function(m) {
     ok(m.test == 'hi', 'Not defined');
@@ -309,6 +383,29 @@ asyncTest('AMD contextual require toUrl', function() {
     start();
   }, err);
 });
+
+// TODO: fix!
+/* asyncTest('AMD race condition test', function() {
+  System.config({
+    bundles: {
+      "tests/out.js": ["tests/lib/modB.js"]
+    }
+  });
+
+  var completed = 0;
+  function completeImport() {
+    if (++completed == 3) {
+      ok(true);
+      start();
+    }
+  }
+
+  System.import('tests/modA.js').then(completeImport, err);
+  setTimeout(function () {
+    System.import('tests/modC.js').then(completeImport, err);
+    System.import('tests/lib/modB.js').then(completeImport, err);
+  }, 10);
+}); */
 
 asyncTest('Loading a CommonJS module', function() {
   System['import']('tests/common-js-module.js').then(function(m) {
@@ -366,8 +463,10 @@ asyncTest('CommonJS require variations', function() {
     ok(m.d1 == 'd');
     ok(m.d2 == 'd');
     ok(m.d3 == "require('not a dep')");
-    // ok(m.d4 == "text require('still not a dep') text");
-    // ok(m.d5 == 'text \'quote\' require("yet still not a dep")');
+    ok(m.d4 == "text/* require('still not a dep') text");
+    ok(m.d5 == 'text \'quote\' require("yet still not a dep")');
+    ok(m.d6 == 'd6');
+    ok(m.d7 == 'export');
     start();
   }, err);
 });
@@ -387,6 +486,13 @@ asyncTest('CommonJS globals', function() {
     start();
   }, err);
 });
+
+asyncTest('CommonJS require.resolve', function() {
+  System['import']('tests/cjs-resolve.js').then(function(m) {
+    ok(m.substr(m.length - 12, 12) == 'test/tests/a');
+    start();
+  }, err);
+})
 
 asyncTest('Loading a UMD module', function() {
   System['import']('tests/umd.js').then(function(m) {
@@ -422,6 +528,13 @@ asyncTest('Versions', function() {
   System['import']('tests/zero@0.js').then(function(m) {
     ok(m == '0');
     start()
+  }, err);
+});
+
+asyncTest('Loading a module with # in the name', function() {
+  System['import']('tests/#.js').then(function(m) {
+    ok(m == '#');
+    start();
   }, err);
 });
 
@@ -506,6 +619,20 @@ asyncTest('System.register regex test', function() {
   }, err);
 });
 
+asyncTest('System.register regex test 2', function() {
+  System['import']('tests/register-regex-2.js').then(function(m) {
+    ok(m);
+    start();
+  }, err);
+});
+
+asyncTest('System.register module name arg', function() {
+  System['import']('tests/module-name.js').then(function(m) {
+    ok(m.name == System.baseURL + 'tests/module-name.js');
+    start();
+  }, err);
+});
+
 asyncTest('System.register group linking test', function() {
   System.config({
     bundles: {
@@ -531,11 +658,6 @@ asyncTest('Loading AMD from a bundle', function() {
   }, err);
 });
 
-System.config({
-  bundles: {
-    'tests/mixed-bundle.js': ['tree/third', 'tree/cjs', 'tree/jquery', 'tree/second', 'tree/global', 'tree/amd', 'tree/first']
-  }
-});
 asyncTest('Loading CommonJS from a bundle', function() {
   System['import']('tree/cjs').then(function(m) {
     ok(m.cjs === true);
@@ -557,6 +679,13 @@ asyncTest('Loading named System.register', function() {
   }, err);
 });
 asyncTest('Loading System.register from ES6', function() {
+  System.config({
+    meta: {
+      'tree/first': {
+        format: 'esm'
+      }
+    }
+  });
   System['import']('tree/first').then(function(m) {
     ok(m.p == 5);
     start();
@@ -720,6 +849,21 @@ asyncTest('Loading ES6 and AMD', function() {
   }, err);
 });
 
+asyncTest('ES module deps support', function() {
+  System.config({
+    meta: {
+      'tests/esm-with-deps.js': {
+        deps: ['tests/esm-dep.js']
+      }
+    }
+  });
+  System['import']('tests/esm-with-deps.js').then(function(m) {
+    ok(m.p == 5);
+    ok(global.esmDep == 'esm-dep');
+    start();
+  });
+});
+
 asyncTest('Module Name meta', function() {
   System['import']('tests/reflection.js').then(function(m) {
     ok(m.myname == System.normalizeSync('tests/reflection.js'), 'Module name not returned');
@@ -805,7 +949,6 @@ asyncTest('Loading two bundles that have a shared dependency', function() {
 asyncTest("System clone", function() {
   var clonedSystem = new System.constructor();
 
-  clonedSystem.paths['*'] = System.paths['*'];
   clonedSystem.baseURL = System.baseURL;
 
   System.map['maptest'] = 'tests/map-test.js';
@@ -821,6 +964,19 @@ asyncTest("System clone", function() {
 
     start();
   }, err);
+});
+
+asyncTest('Custom loader instance System scoped', function() {
+  var customSystem = new System.constructor();
+
+  customSystem.baseURL = System.baseURL;
+  customSystem.paths = System.paths;
+  customSystem.transpiler = System.transpiler;
+  customSystem['import']('tests/loader-scoping.js')
+  .then(function(m) {
+    ok(m.loader == customSystem);
+    start();
+  }, err);;
 });
 
 if(typeof window !== 'undefined' && window.Worker) {
@@ -864,7 +1020,23 @@ asyncTest('Globals', function() {
   System['import']('tests/with-global-deps.js').then(function(m) {
     for (var p in m)
       ok(false);
-    ok(true);
+    ok(!global.$$$);
+    start();
+  }, err);
+});
+
+asyncTest('Scriptload precompiled global with exports still defined', function() {
+  System.config({
+    meta: {
+      'tests/global-single-compiled.js': {
+        scriptLoad: true,
+        exports: 'foobar',
+        format: typeof global != 'undefined' ? 'register' : 'global'
+      }
+    }
+  });
+  System['import']('tests/global-single-compiled.js').then(function(m) {
+    ok(m == 'foo');
     start();
   }, err);
 });
@@ -900,7 +1072,7 @@ asyncTest('Package configuration CommonJS config example', function() {
       'global-test': 'tests/testpkg/test.ts'
     },
     //packageConfigPaths: ['tests/testpk*.json'],
-    packageConfigPaths: ['tests/testpkg/system.json', 'tests/testpkg/depcache.json'],
+    packageConfigPaths: ['tests/testpkg/system.json'],
     packages: {
       'tests/testpkg': {
         main: './noext',
@@ -996,10 +1168,9 @@ asyncTest('Package edge cases', function() {
 
   // ensure trailing "/" is equivalent to "tests/testpkg"
   clonedSystem.config({
-    packageConfigPaths: ['tests/*.json/'],
+    packageConfigPaths: ['tests/*.json'],
     packages: {
       'tests/testpkg2/': {
-        basePath: '.',
         defaultExtension: 'js'
       }
     }
@@ -1008,10 +1179,116 @@ asyncTest('Package edge cases', function() {
   // we now have nested packages:
   // testpkg/ within test/ within / root://
   // we're testing that we always select the rules of the inner package
-  clonedSystem['import']('tests/testpkg2/asdf.asdf').then(function(m) {
+  clonedSystem['import']('tests/testpkg2/').then(function(m) {
     ok(m.asdf == 'asdf');
     start();
   }, err);
+});
+
+asyncTest('Package map circular cases', function() {
+  System.config({
+    map: {
+      tp3: 'tests/testpkg3'
+    },
+    packages: {
+      'tests/testpkg3': {
+        map: {
+          './lib': './lib/asdf.js',
+          './lib/': './lib/index.js',
+          './lib/p': './lib/q.js',
+          './src/': './src/index.js',
+          './bin': './bin/index.js'
+        }
+      }
+    }
+  });
+
+  Promise.all([
+    System.normalize('tp3/lib'),
+    System.normalize('tp3/lib/'),
+    System.normalize('tp3/lib/q'),
+    System.normalize('tp3/lib/p'),
+    
+    System.normalize('../lib', System.baseURL + 'tests/testpkg3/asdf/x.js'),
+    System.normalize('../lib/', System.baseURL + 'tests/testpkg3/asdf/x.js'),
+    System.normalize('../lib/x', System.baseURL + 'tests/testpkg3/asdf/x.js'),
+    
+    System.normalize('.', System.baseURL + 'tests/testpkg3/lib/a'),
+    System.normalize('./', System.baseURL + 'tests/testpkg3/lib/x'),
+    System.normalize('./p', System.baseURL + 'tests/testpkg3/lib/x'),
+    System.normalize('./q', System.baseURL + 'tests/testpkg3/lib/x'),
+
+    System.normalize('./lib', System.baseURL + 'tests/testpkg3/x.js'),
+    System.normalize('./lib/', System.baseURL + 'tests/testpkg3/x.js'),
+    System.normalize('./lib/p', System.baseURL + 'tests/testpkg3/x.js'),
+    System.normalize('./lib/q', System.baseURL + 'tests/testpkg3/x.js'),
+
+    System.normalize('../lib/', System.baseURL + 'tests/testpkg3/lib/x.js'),
+    System.normalize('../lib/x', System.baseURL + 'tests/testpkg3/lib/x.js'),
+    System.normalize('tp3/lib/q', System.baseURL + 'tests/testpkg3/lib/x.js'),
+
+    System.normalize('./src', System.baseURL + 'tests/testpkg3/'),
+    System.normalize('./src/', System.baseURL + 'tests/testpkg3/'),
+    System.normalize('./src/x', System.baseURL + 'tests/testpkg3/'),
+
+    System.normalize('tp3/src'),
+    System.normalize('tp3/src/'),
+    System.normalize('tp3/src/x'),
+
+    System.normalize('./bin', System.baseURL + 'tests/testpkg3/'),
+    System.normalize('./bin/', System.baseURL + 'tests/testpkg3/'),
+    System.normalize('./bin/x', System.baseURL + 'tests/testpkg3/'),
+
+    System.normalize('tp3/bin'),
+    System.normalize('tp3/bin/'),
+    System.normalize('tp3/bin/x'),
+
+    System.normalize('.', System.baseURL + 'tests/testpkg3/bin/x')
+  ])
+  .then(function(n) {
+    ok(n[0] == System.baseURL + 'tests/testpkg3/lib/asdf.js');
+    ok(n[1] == System.baseURL + 'tests/testpkg3/lib/index.js');
+    ok(n[2] == System.baseURL + 'tests/testpkg3/lib/q.js');
+    ok(n[3] == System.baseURL + 'tests/testpkg3/lib/q.js');
+
+    ok(n[4] == System.baseURL + 'tests/testpkg3/lib/asdf.js');
+    ok(n[5] == System.baseURL + 'tests/testpkg3/lib/index.js');
+    ok(n[6] == System.baseURL + 'tests/testpkg3/lib/x.js');
+
+    ok(n[7] == System.baseURL + 'tests/testpkg3/lib/index.js');
+    ok(n[8] == System.baseURL + 'tests/testpkg3/lib/index.js');
+    ok(n[9] == System.baseURL + 'tests/testpkg3/lib/q.js');
+    ok(n[10] == System.baseURL + 'tests/testpkg3/lib/q.js');
+
+    ok(n[11] == System.baseURL + 'tests/testpkg3/lib/asdf.js');
+    ok(n[12] == System.baseURL + 'tests/testpkg3/lib/index.js');
+    ok(n[13] == System.baseURL + 'tests/testpkg3/lib/q.js');
+    ok(n[14] == System.baseURL + 'tests/testpkg3/lib/q.js');
+
+    ok(n[15] == System.baseURL + 'tests/testpkg3/lib/index.js');
+    ok(n[16] == System.baseURL + 'tests/testpkg3/lib/x.js');
+    ok(n[17] == System.baseURL + 'tests/testpkg3/lib/q.js');
+
+    ok(n[18] == System.baseURL + 'tests/testpkg3/src.js');
+    ok(n[19] == System.baseURL + 'tests/testpkg3/src/index.js');
+    ok(n[20] == System.baseURL + 'tests/testpkg3/src/x.js');
+
+    ok(n[21] == System.baseURL + 'tests/testpkg3/src.js');
+    ok(n[22] == System.baseURL + 'tests/testpkg3/src/index.js');
+    ok(n[23] == System.baseURL + 'tests/testpkg3/src/x.js');
+
+    ok(n[24] == System.baseURL + 'tests/testpkg3/bin/index.js');
+    ok(n[25] == System.baseURL + 'tests/testpkg3/bin/index.js');
+    ok(n[26] == System.baseURL + 'tests/testpkg3/bin/x.js');
+
+    ok(n[27] == System.baseURL + 'tests/testpkg3/bin/index.js');
+    ok(n[28] == System.baseURL + 'tests/testpkg3/bin/index.js');
+    ok(n[29] == System.baseURL + 'tests/testpkg3/bin/x.js');
+
+    ok(n[30] == System.baseURL + 'tests/testpkg3/bin/index.js');
+    start();
+  }, err);
+
 });
 
 if (!ie8)
@@ -1067,21 +1344,119 @@ asyncTest('Importing a script with wrong integrity fails', function() {
     }
   });
   System['import']('tests/csp/integrity.js').then(function(m) {
-    ok(true);
-    console.log('SRI not supported in this browser');
+    ok(m.integrity == 'integrity');
     start();
   }, function(e) {
     ok(typeof e !== 'undefined');
+    console.log('SRI not supported in this browser');
     start();
   });
 });
 
-if (typeof process != 'undefined')
-asyncTest('Loading Node core modules', function() {
-  System['import']('@node/fs').then(function(m) {
-    ok(m.writeFile);
+if (typeof process != 'undefined') {
+  asyncTest('Loading Node core modules', function() {
+    System['import']('@node/fs').then(function(m) {
+      ok(m.writeFile);
+      start();
+    });
+  });
+
+
+  asyncTest('No global define leak in Node', function() {
+    ok(typeof define == 'undefined');
+    start();
+  });
+}
+  
+asyncTest('Package-local alias esm', function() {
+  System.config({
+    map: {
+      'package-local-alias-esm': 'tests/package-local-alias'
+    },
+    packages: {
+      'package-local-alias-esm': {
+        main: 'index-esm.js',
+        format: 'esm',
+        meta: {
+          './local-esm': {alias: './local/index-esm.js'}
+        }
+      }
+    }
+  });
+  System['import']('package-local-alias-esm').then(function(m) {
+    ok(m.q == 'q');
+    ok(m.fromLocal == 'x');
     start();
   });
 });
+
+asyncTest('Package-local alias cjs', function() {
+  System.config({
+    map: {
+      'package-local-alias-cjs': 'tests/package-local-alias'
+    },
+    packages: {
+      'package-local-alias-cjs': {
+        main: 'index-cjs.js',
+        format: 'cjs',
+        meta: {
+          './local-cjs': {alias: './local/index-cjs.js'}
+        }
+      }
+    }
+  });
+  System['import']('package-local-alias-cjs').then(function(m) {
+    ok(m.q == 'q');
+    ok(m.fromLocal == 'x');
+    start();
+  });
+});
+
+asyncTest('Package-local alias esm default export', function() {
+  System.config({
+    map: {
+      'package-local-alias-default-esm': 'tests/package-local-alias'
+    },
+    packages: {
+      'package-local-alias-default-esm': {  // can't reuse package names from previous test
+        main: 'index-default-esm.js',   // because System.config() results persist across tests
+        format: 'esm',
+        meta: {
+          './local-default-esm': {alias: './local/index-default-esm.js'}
+        }
+      }
+    }
+  });
+  System['import']('package-local-alias-default-esm').then(function(m) {
+    ok(m.q == 'q');
+    ok(m.fromLocal == 'x');
+    ok(m.fromLocalDirect == 'x');
+    start();
+  });
+});
+
+asyncTest('Package-local alias cjs default export', function() {
+  System.config({
+    map: {
+      'package-local-alias-default-cjs': 'tests/package-local-alias'
+    },
+    packages: {
+      'package-local-alias-default-cjs': {
+        main: 'index-default-cjs.js',
+        format: 'cjs',
+        meta: {
+          './local-default-cjs': {alias: './local/index-default-cjs.js'}
+        }
+      }
+    }
+  });
+  System['import']('package-local-alias-default-cjs').then(function(m) {
+    ok(m.q == 'q');
+    ok(m.fromLocal == 'x'); 
+    ok(m.fromLocalDirect == 'x');
+    start();
+  });
+});
+
 
 })(typeof window == 'undefined' ? global : window);

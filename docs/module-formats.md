@@ -14,7 +14,7 @@ The module format can be set via meta configuration:
 System.config({
   meta: {
     './module/path.js': {
-      format: 'es6'
+      format: 'esm'
     }
   }
 });
@@ -85,6 +85,12 @@ For comprehensive handling of NodeJS modules, a conversion process is needed to 
 
 _CommonJS is loaded via XHR making it non-[CSP](http://www.html5rocks.com/en/tutorials/security/content-security-policy/) compatible._
 
+Note that CommonJS modules on npm, loaded as CommonJS may well not load correctly through SystemJS. This is because SystemJS
+does not implement the NodeJS loading algorithm.
+
+If you want to load NodeJS modules through SystemJS you can use `import nodeModule from '@node/node-module-name'`, but this should only
+be used when absolutely necessary as it stops code from being universal, and makes it only compatible with NodeJS.
+
 ### AMD
 
 * AMD support includes all AMD structural variations including the [CommonJS wrapper form](http://requirejs.org/docs/api.html#cjsmodule).
@@ -144,7 +150,7 @@ var x = 'global'; // detected as a global
 y = 'global';     // detected as a global
 ```
 
-These two cases fail in IE8, so do need to have their [exports explicitly declared](#exports) if compatibility is desired.
+These two cases fail in IE8 and WebWorkers, so do need to have their [exports explicitly declared](#exports) if compatibility is desired.
 
 > Globals are not removed from the global object for shim compatibility, but this could become possible in future if all globals
 use the [globals](#globals) meta for shims instead of [deps](#shim-dependencies).

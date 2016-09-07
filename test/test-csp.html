@@ -29,7 +29,7 @@
       }
 
       asyncTest('System version', function() {
-        ok(System.version.match(/^\d+\.\d+\.\d+ CSP$/));
+        ok(System.version.match(/^\d+\.\d+\.\d+(-\w+)? CSP$/));
         start();
       });
 
@@ -65,6 +65,24 @@
             ok(m.named == 'define');
             start();
           }, err);
+        }, err);
+      });
+
+      asyncTest('Global script with exports as an array', function() {
+        System.config({
+          meta: {
+            'tests/global-exports-array.js': {
+              exports: ['A', 'B']
+            }
+          }
+        });
+
+        System['import']('tests/global-exports-array.js').then(function(m) {
+          ok(m.A == 'A');
+          ok(m.B == 'B');
+          ok(!m.C);
+          ok(m['default'] == 'A');
+          start();
         }, err);
       });
 
@@ -182,7 +200,35 @@
           ok(e.toString().indexOf('did not call System.register or AMD define') != -1);
           start();
         });
-      })
+      });
+
+      asyncTest('Loading a global with exports defined', function() {
+        System.config({
+          meta: {
+            'tests/global-single.js': {
+              exports: 'foo'
+            }
+          }
+        });
+        System['import']('tests/global-single.js').then(function(m) {
+          ok(m == 'bar');
+          start();
+        });
+      });
+
+      asyncTest('Loading a precompiled global with exports still defined', function() {
+        System.config({
+          meta: {
+            'tests/global-single-compiled.js': {
+              exports: 'foobar'
+            }
+          }
+        });
+        System['import']('tests/global-single-compiled.js').then(function(m) {
+          ok(m == 'foo');
+          start();
+        });
+      });
       
       asyncTest('Importing a script with wrong integrity fails', function() {
         System.config({
@@ -211,6 +257,24 @@
           start();
         }, err);
       });
+
+      asyncTest('Importing jQuery from CDN', function() {
+        System['import']('https://code.jquery.com/jquery-1.11.3.min.js').then(function($) {
+          ok($.fn);
+          start();
+        });
+      });
+
+      asyncTest('Loading package configuration json', function() {
+        System.config({
+          packageConfigPaths: ['tests/testpkg*.json']
+        });
+        System.import('tests/testpkg2')
+        .then(function(m) {
+          ok(m.asdf == 'asdf');
+          start();
+        }, err);
+      })
     </script>
   </body>
 </html>

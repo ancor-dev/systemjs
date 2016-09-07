@@ -6,11 +6,11 @@ The hooks plugins can override are `locate`, `fetch`, `translate` and `instantia
 
 Read more about loader extensions and hooks at the [ES6 Module Loader polyfill wiki](https://github.com/ModuleLoader/es6-module-loader/blob/v0.17.0/docs/loader-extensions.md).
 
-The behavior of the hooks is:
+The behaviors of the hooks are:
 
 * Locate: Overrides the location of the plugin resource
 * Fetch: Called with third argument representing default fetch function, has full control of fetch output.
-* Translate: Returning undefined, assumes `load.source` was modified, and runs default translate hooks as well. Returning a source skips running the default hooks.
+* Translate: Returns the translated source from `load.source`, can also set `load.metadata.sourceMap` for full source maps support.
 * Instantiate: Providing this hook as a promise or function allows the plugin to hook instantiate. Any return value becomes the defined custom module object for the plugin call.
 
 ### Building Plugins
@@ -71,6 +71,10 @@ js/css.js:
       link.onload = resolve;
 
       document.head.appendChild(link);
+    })
+    .then(function() {
+      // return an empty module in the module pipeline itself
+      return '';
     });
   }
 ```
